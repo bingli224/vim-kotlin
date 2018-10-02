@@ -1,8 +1,11 @@
 
-" 14:50 THA 19/08/2018
 " By BingLi224
 "
 " Kotlin Tools
+"
+" 14:50 THA 19/08/2018
+"
+" Initial.
 "
 " 01:41 THA 01/10/2018
 "
@@ -209,7 +212,7 @@ function! KotlinCompile ( )
 
 	"echo h_err_msg
 	"echo len ( keys ( h_err_msg ) )
-	unmenu &Kotlin\ Errors
+	"unmenu "&Kotlin\\ Errors."
 	if len ( keys ( h_err_msg ) ) <= 0
 		return
 	endif
