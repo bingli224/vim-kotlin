@@ -130,14 +130,21 @@ function! KotlinCompile2Jar ( )
 
 	echo "====== getcwd ================\n"
 	echo getcwd ( )
-	cd `=t:srcpath`
-	if exists ( t:dir ) && t:dir != ""
-		let t:kt_result = system( "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:dir . "/" . t:classname . ".jar" )
-		echo "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:dir . "/" . t:classname . ".jar"
-	else
-		let t:kt_result = system( "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:classname . ".jar" )
-		echo "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:classname . ".jar"
-	endif
+	echo t:srcpath
+	echo t:dir
+	"cd `=t:srcpath`
+	cd `=t:dir`
+
+	let t:kt_result = system( "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . t:srcpath . '\' . expand ( "%:t" ) . " -include-runtime -d " . t:classname . ".jar" )
+	echo "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . t:srcpath . '\' . expand ( "%:t" ) . " -include-runtime -d " . t:classname . ".jar"
+
+	"if exists ( t:dir ) && t:dir != ""
+	"	let t:kt_result = system( "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:dir . "/" . t:classname . ".jar" )
+	"	echo "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:dir . "/" . t:classname . ".jar"
+	"else
+	"	let t:kt_result = system( "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:classname . ".jar" )
+	"	echo "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:classname . ".jar"
+	"endif
 
 	" show error(s) into the source code file
 	let h_err_msg = { }
@@ -275,7 +282,6 @@ function! KotlinRunJar ( )
 		cd `=t:dir`
 	endif
 	
-
 	"echo class
 	":!start cmd /c echo "kotlin.bat -cp \"" .  t:classpath . "\" " . t:classname
 	":!start cmd /c "kotlin.bat -cp \"" .  t:classpath . "\" " . t:classname
