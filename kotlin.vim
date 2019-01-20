@@ -28,6 +28,10 @@
 "
 " Fix the error notation
 " Add the -cp for compilation from notations in souce code
+"
+" 13:24 THA 19/01/2019
+"
+" Fix the error parsing, matching with source file
 
 " set class path
 if ! exists ( "t:classpath" )
@@ -55,14 +59,13 @@ function! SetPaths ( )
 	" remember current line
 	let current_pos = getpos ( '.' )
 
-	let pos = searchpos ( "^\\s\*package\\s" )
+	let pos = searchpos ( "^\\s\*package\\s", "w" )
 	" !! assume that the pattern is "^package [name];"
 	let t:package = matchstr ( getline ( pos[0] ), '[^;]\+', pos[1] + 7 )
 	let t:dir = ''
 	
 	if t:package != ''
 		" chdir to the root
-
 		let fpath = split ( t:classpath, "[\\\/]" )
 		let cpath = split ( t:package, '\.' )
 		let b_found_path = 0
@@ -79,7 +82,6 @@ function! SetPaths ( )
 		if b_found_path != 0
 			" change the dir of t:classpath
 			let t:dir = join ( fpath[ 0 : len ( fpath ) - len ( cpath ) - 1 ], '\' )
-			echo t:classpath . "Added classpath: " . t:dir
 			let t:classpath = t:dir . ';' . t:classpath
 		endif
 
@@ -88,7 +90,7 @@ function! SetPaths ( )
 	endif
 
 	" find extra -cp
-	let pos = searchpos ( "\/\/\\s*:CP:\\s\\+\\S" )
+	let pos = searchpos ( "\/\/\\s*:CP:\\s\\+\\S", "w" )
 	while pos[ 0 ] > 0
 		if ! exists ( "first_pos" )
 			" remember first match
@@ -109,8 +111,6 @@ function! SetPaths ( )
 	" change from / \ to .
 	let t:classname = substitute ( substitute ( t:classname, "//", '.', 'g' ), "\/", '.', 'g' )
 
-	echo "srcp=\t" . t:srcpath . "\nclassp=\t" . t:classpath . "\nclassn=\t" . t:classname . "\nt:package=\t" . t:package . "\nt:dir=\t" . t:dir . "\n"
-
 	" return to current working line
 	":exe current_pos
 	:call setpos( '.', current_pos )
@@ -121,30 +121,12 @@ function! KotlinCompile2Jar ( )
 	" save the current file
 	:w
 
-	" set dir to this file
-	"l`=t:srcpath`
-	" compile this file
-	" exec \":!kotlinc.bat \" . expand ( \"%:t\" )
-
 	:call SetPaths ( )
 
-	echo "====== getcwd ================\n"
-	echo getcwd ( )
-	echo t:srcpath
-	echo t:dir
-	"cd `=t:srcpath`
 	cd `=t:dir`
 
 	let t:kt_result = system( "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . t:srcpath . '\' . expand ( "%:t" ) . " -include-runtime -d " . t:classname . ".jar" )
 	echo "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . t:srcpath . '\' . expand ( "%:t" ) . " -include-runtime -d " . t:classname . ".jar"
-
-	"if exists ( t:dir ) && t:dir != ""
-	"	let t:kt_result = system( "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:dir . "/" . t:classname . ".jar" )
-	"	echo "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:dir . "/" . t:classname . ".jar"
-	"else
-	"	let t:kt_result = system( "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:classname . ".jar" )
-	"	echo "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) . " -include-runtime -d " . t:classname . ".jar"
-	"endif
 
 	" show error(s) into the source code file
 	let h_err_msg = { }
@@ -156,7 +138,6 @@ function! KotlinCompile2Jar ( )
 	" error column
 	let int_errcol = 0
 	" foreach line from compile result
-	"for str_line in split ( t:kt_result, "\n" )
 	let arr_lines = split ( t:kt_result, "\n" )
 	let idx_line = 0
 	while idx_line < len ( arr_lines )
@@ -167,12 +148,12 @@ function! KotlinCompile2Jar ( )
 		let idx_line = idx_line + 1
 
 		echo str_line
-		"echo ":::" . b_mode . ":::" . str_line
+
 		let subtxt = split ( str_line, ":" )
-		" if this line is file name, line no., and error message
 		if b_mode == 0
 				\ && len ( subtxt ) > 4
-				\ && subtxt[ 0 ] == expand ( "%:p:t" )
+				"\ && subtxt[ 0 ] == expand ( "%:p:t" )
+				\ && subtxt[ 0 ] =~ expand ( "%:p:t" ) . "$"
 				\ && len ( subtxt[ 1 ] ) > 1 && substitute ( subtxt[ 1 ], "\\d", "", "g" ) == ""
 				\ && subtxt[ 3 ] == ' error'
 			" remember the error char index
@@ -217,7 +198,6 @@ function! KotlinCompile2Jar ( )
 			"if strlen ( str_line ) > strlen ( substitute ( str_line, "^\\t", "", "" ) )
 			"	substitute ( str_line, "
 			"let str_line = strlen ( str_line ) - 3
-			"echo str_line
 			let str_org = getline ( int_errln )
 			for idx in range ( 0, int_errcol )
 				if str_org[idx] == "\t"
@@ -246,16 +226,12 @@ function! KotlinCompile2Jar ( )
 		endif
 	endwhile
 
-	"echo h_err_msg
-	"echo len ( keys ( h_err_msg ) )
-	"unmenu "&Kotlin\\ Errors."
 	if len ( keys ( h_err_msg ) ) <= 0
 		return
 	endif
 
 	" show the errors in source code
 	for idx_err in reverse ( sort ( keys ( h_err_msg ) ) )
-		"exec ( 'normal ' . idx_err . "ggo\<Esc>0Di" . join ( h_err_point[ idx_err ], "\n:ERR:" ) )
 		exec ( 'normal ' . idx_err . "ggO\<Esc>0Di// :ERR:" . join ( h_err_msg[ idx_err ], "\n:ERR:" ) )
 		if ( has_key ( h_err_point, idx_err ) )
 			exec ( "normal jo\<Esc>0Di" . join ( h_err_point[ idx_err ], "\n" ) )
@@ -282,13 +258,6 @@ function! KotlinRunJar ( )
 		cd `=t:dir`
 	endif
 	
-	"echo class
-	":!start cmd /c echo "kotlin.bat -cp \"" .  t:classpath . "\" " . t:classname
-	":!start cmd /c "kotlin.bat -cp \"" .  t:classpath . "\" " . t:classname
-	"exec ":!kotlin.bat -cp ". t:classpath . " " . t:classname
-	"exec ":!start cmd /c kotlin.bat -cp \"". t:classpath . "\" " . t:classname
-	"echo ":!start cmd /k cd " . t:dir . " && kotlin.bat -cp \"". t:classpath . "\" " . t:classname
-	"exec ":!start cmd /k cd " . t:dir . " && kotlin.bat -Ddata.dir=\"" . t:dir . "\" -cp \"". t:classpath . "\" " . t:classname . "Kt"
 	exec ":!start cmd /k cd " . t:dir . " && java -cp \"". t:classpath . "\" -jar " . t:classname . ".jar"
 endfunction
 
@@ -297,25 +266,14 @@ function! KotlinCompile ( )
 	" save the current file
 	:w
 
-	" set dir to this file
-	"l`=t:srcpath`
-	" compile this file
-	" exec \":!kotlinc.bat \" . expand ( \"%:t\" )
-
 	:call SetPaths ( )
 
-	echo "====== getcwd ================\n"
-	echo getcwd ( )
 	cd `=t:srcpath`
 	if exists ( t:dir ) && t:dir != ""
 		let t:kt_result = system( "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " -d " . t:dir . " " . expand ( "%:t" ) )
-		"echo "kotlinc.bat -cp " . t:classpath . " -kotlin-home " . t:srcpath . " -d " . t:dir . " " . expand ( "%:t" )
-		"let t:kt_result = system( "kotlinc.bat -cp " . t:classpath . " -kotlin-home " . t:srcpath . " -d " . t:dir . " " . expand ( "%:t" ) )
 		echo "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " -d " . t:dir . " " . expand ( "%:t" )
 	else
 		let t:kt_result = system( "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" ) )
-		"echo "kotlinc.bat -cp " . t:classpath . " -kotlin-home " . t:srcpath . " " . expand ( "%:t" )
-		"let t:kt_result = system( "kotlinc.bat -cp " . t:classpath . " -kotlin-home " . t:srcpath . " " . expand ( "%:t" ) )
 		echo "kotlinc.bat -jvm-target 1.8 -cp " . t:classpath . " " . expand ( "%:t" )
 	endif
 
@@ -340,12 +298,12 @@ function! KotlinCompile ( )
 		let idx_line = idx_line + 1
 
 		echo str_line
-		"echo ":::" . b_mode . ":::" . str_line
+
 		let subtxt = split ( str_line, ":" )
-		" if this line is file name, line no., and error message
 		if b_mode == 0
 				\ && len ( subtxt ) > 4
-				\ && subtxt[ 0 ] == expand ( "%:p:t" )
+				"\ && subtxt[ 0 ] == expand ( "%:p:t" )
+				\ && subtxt[ 0 ] =~ expand ( "%:p:t" ) . "$"
 				\ && len ( subtxt[ 1 ] ) > 1 && substitute ( subtxt[ 1 ], "\\d", "", "g" ) == ""
 				\ && subtxt[ 3 ] == ' error'
 			" remember the error char index
@@ -387,10 +345,6 @@ function! KotlinCompile ( )
 
 			" TEMP: convert str_line to the column of target error
 			" IF the first char is tab, remove 2
-			"if strlen ( str_line ) > strlen ( substitute ( str_line, "^\\t", "", "" ) )
-			"	substitute ( str_line, "
-			"let str_line = strlen ( str_line ) - 3
-			"echo str_line
 			let str_org = getline ( int_errln )
 			for idx in range ( 0, int_errcol )
 				if str_org[idx] == "\t"
@@ -419,8 +373,6 @@ function! KotlinCompile ( )
 		endif
 	endwhile
 
-	"echo h_err_msg
-	"echo len ( keys ( h_err_msg ) )
 	"unmenu "&Kotlin\\ Errors."
 	if len ( keys ( h_err_msg ) ) <= 0
 		return
@@ -428,7 +380,6 @@ function! KotlinCompile ( )
 
 	" show the errors in source code
 	for idx_err in reverse ( sort ( keys ( h_err_msg ) ) )
-		"exec ( 'normal ' . idx_err . "ggo\<Esc>0Di" . join ( h_err_point[ idx_err ], "\n// :ERR:" ) )
 		exec ( 'normal ' . idx_err . "ggO\<Esc>0Di// :ERR:" . join ( h_err_msg[ idx_err ], "\n// :ERR:" ) )
 		if ( has_key ( h_err_point, idx_err ) )
 			exec ( "normal jo\<Esc>0Di" . join ( h_err_point[ idx_err ], "\n" ) )
@@ -458,14 +409,6 @@ function! KotlinRun ( )
 		"exec ":!start cmd /k kotlin.bat -cp \"". t:classpath . "\" " . t:classname . "Kt"
 	endif
 	
-
-	"echo class
-	":!start cmd /c echo "kotlin.bat -cp \"" .  t:classpath . "\" " . t:classname
-	":!start cmd /c "kotlin.bat -cp \"" .  t:classpath . "\" " . t:classname
-	"exec ":!kotlin.bat -cp ". t:classpath . " " . t:classname
-	"exec ":!start cmd /c kotlin.bat -cp \"". t:classpath . "\" " . t:classname
-	"echo ":!start cmd /k cd " . t:dir . " && kotlin.bat -cp \"". t:classpath . "\" " . t:classname
-	"exec ":!start cmd /k cd " . t:dir . " && kotlin.bat -Ddata.dir=\"" . t:dir . "\" -cp \"". t:classpath . "\" " . t:classname . "Kt"
 	exec ":!start cmd /k cd " . t:dir . " && kotlin.bat -cp \"". t:classpath . "\" " . t:classname . "Kt"
 endfunction
 
